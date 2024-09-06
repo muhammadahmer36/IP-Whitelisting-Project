@@ -1,0 +1,102 @@
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Build
+        steps:
+          - task: CmdLine@2
+            inputs:
+              script: |
+                echo Whitelist Your IP
+                echo Give your IP from Whats my IP
+
+  - stage: Deploy
+    jobs:
+      - job: Deploy
+        pool:
+          vmImage: windows-2022  # Correct image specification for the job
+        steps:
+          - task: AzurePowerShell@5
+            inputs:
+              azureSubscription: 'Ecotime by HBS - Azure Production (221c005f-35d0-4b11-88ec-d5fc0acfd703)'
+              ScriptType: 'InlineScript'
+              Inline: |
+                # Define Azure Subscription Information
+                $subscriptionId = "221c005f-35d0-4b11-88ec-d5fc0acfd703"
+                $resourceGroupName = "dev01-ecotimebyhbs"
+                $nsgName = "nsg-ecotimebyhbsdev"
+                $ruleNameToDelete = "HamzaAgent"
+                
+                # Get the NSG
+                $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Name $nsgName
+                
+                # Find the rule to delete
+                $ruleToDelete = $nsg.SecurityRules | Where-Object { $_.Name -eq $ruleNameToDelete }
+                
+                if ($ruleToDelete -ne $null) {
+                    # Remove the rule from the NSG
+                    Remove-AzNetworkSecurityRuleConfig -Name $ruleToDelete.Name -NetworkSecurityGroup $nsg
+                
+                    # Update the NSG
+                    $nsg | Set-AzNetworkSecurityGroup
+                
+                    Write-Host "Inbound rule $($ruleToDelete.Name) deleted successfully."
+                } else {
+                    Write-Host "Inbound rule $($ruleNameToDelete) not found in the NSG."
+                }
+              azurePowerShellVersion: 'LatestVersion'
+
+          - task: AzurePowerShell@5
+            inputs:
+              azureSubscription: 'Ecotime by HBS - Azure Production (221c005f-35d0-4b11-88ec-d5fc0acfd703)'
+              ScriptType: 'InlineScript'
+              Inline: |
+                # IP address to whitelist
+                $agentIpAddress = "154.198.114.6"
+                
+                # Azure Subscription Information
+                $resourceGroupName = "dev01-ecotimebyhbs"
+                $nsgName = "nsg-ecotimebyhbsdev"
+                $ruleName = "HamzaAgent"
+                $rulePriority = 1234  # Priority for the rule
+                
+                # Ensure TLS 1.2 is used
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                
+                # Get the NSG
+                $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $resourceGroupName -Name $nsgName
+                
+                # Check if the IP rule already exists
+                $existingRule = $nsg.SecurityRules | Where-Object { $_.SourceAddressPrefix -eq $agentIpAddress -and $_.Name -eq $ruleName }
+                
+                if ($existingRule -eq $null) {
+                    # Add a new rule to whitelist the IP
+                    $newRule = New-AzNetworkSecurityRuleConfig -Name $ruleName -Description "Whitelist IP AzureDevops Agent" `
+                                    -Access Allow -Protocol '*' -Direction Inbound -Priority $rulePriority `
+                                    -SourceAddressPrefix $agentIpAddress -SourcePortRange '*' `
+                                    -DestinationAddressPrefix '10.0.1.0/24' -DestinationPortRange '3342'
+                
+                    # Add the rule to the NSG
+                    $nsg | Add-AzNetworkSecurityRuleConfig -Name $newRule.Name -Description $newRule.Description `
+                    -Access $newRule.Access -Protocol $newRule.Protocol -Direction $newRule.Direction `
+                    -Priority $newRule.Priority -SourceAddressPrefix $newRule.SourceAddressPrefix `
+                    -SourcePortRange $newRule.SourcePortRange -DestinationAddressPrefix $newRule.DestinationAddressPrefix `
+                    -DestinationPortRange $newRule.DestinationPortRange
+                
+                    # Update the NSG
+                    $nsg | Set-AzNetworkSecurityGroup
+                
+                    Start-Sleep -Seconds 50
+                
+                    Write-Host "IP Address $agentIpAddress whitelisted successfully with rule $ruleName."
+                } else {
+                    Write-Host "IP Address $agentIpAddress is already whitelisted with rule $ruleName."
+                }
+              azurePowerShellVersion: 'LatestVersion'
