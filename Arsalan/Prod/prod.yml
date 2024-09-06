@@ -25,11 +25,11 @@ stages:
         steps:
           - task: AzurePowerShell@5
             inputs:
-              azureSubscription: 'Ecotime by HBS - Azure Production (221c005f-35d0-4b11-88ec-d5fc0acfd703)'
+              azureSubscription: ''
               ScriptType: 'InlineScript'
               Inline: |
                 # Define Azure Subscription Information
-                $subscriptionId = "221c005f-35d0-4b11-88ec-d5fc0acfd703"
+                $subscriptionId = ""
                 $resourceGroupName = "Production"
                 $nsgName = "SQL-Prodstage-nsg"
                 $ruleNameToDelete = "shahzobAgent"
@@ -55,7 +55,7 @@ stages:
 
           - task: AzurePowerShell@5
             inputs:
-              azureSubscription: 'Ecotime by HBS - Azure Production (221c005f-35d0-4b11-88ec-d5fc0acfd703)'
+              azureSubscription: ''
               ScriptType: 'InlineScript'
               Inline: |
                 # IP address to whitelist
